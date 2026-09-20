@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Central de Status — ciclo de produtos</title>
+  <meta name="theme-color" content="#8c3d68">
+  <link rel="manifest" href="manifest.webmanifest">
+  <style>
+    :root { --ink:#2f2530; --muted:#756876; --brand:#8c3d68; --soft:#fff5f9; --line:#eadde5; --ok:#287a55; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:#fbf9fa; font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif; }
+    header { background:linear-gradient(135deg,#6f2d55,#b65d88); color:#fff; padding:28px max(20px,calc((100% - 1120px)/2)); }
+    header h1 { margin:0 0 5px; font-size:clamp(24px,4vw,36px); }
+    header p { margin:0; opacity:.9; }
+    main { max-width:1120px; margin:24px auto; padding:0 20px 48px; }
+    .grid { display:grid; grid-template-columns:repeat(12,1fr); gap:18px; }
+    .card { grid-column:span 12; background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px; box-shadow:0 3px 14px #4a1d3108; }
+    .half { grid-column:span 6; } .third { grid-column:span 4; }
+    h2 { margin:0 0 14px; font-size:20px; } h3 { margin:18px 0 8px; font-size:16px; }
+    label { display:block; color:var(--muted); font-size:13px; font-weight:600; margin:10px 0 5px; }
+    input, select, textarea { width:100%; border:1px solid #d8cbd4; border-radius:8px; padding:10px; font:inherit; background:#fff; }
+    textarea { min-height:78px; resize:vertical; }
+    button { border:0; border-radius:8px; padding:10px 14px; cursor:pointer; font:600 14px inherit; background:var(--brand); color:#fff; }
+    button.secondary { background:#f2e8ee; color:var(--brand); } button.danger { background:#fff0f2; color:#a32f4d; }
+    .actions { display:flex; flex-wrap:wrap; gap:9px; margin-top:14px; }
+    .hint { color:var(--muted); font-size:13px; margin:6px 0; }
+    .status { color:var(--ok); min-height:22px; font-weight:600; }
+    .product { border:1px solid var(--line); border-radius:10px; padding:12px; margin:10px 0; background:#fffafd; }
+    .product strong { display:block; } .product small { color:var(--muted); display:block; margin:3px 0 8px; }
+    .product-row { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+    .pill { display:inline-block; padding:3px 8px; border-radius:999px; background:#f5e5ee; color:var(--brand); font-size:12px; }
+    .day { border-left:4px solid #c7769d; padding:12px 14px; margin:10px 0; background:#fff; border-radius:0 10px 10px 0; }
+    .day h3 { margin:0 0 4px; } .day p { margin:5px 0; } .copy { white-space:pre-wrap; background:var(--soft); padding:10px; border-radius:7px; }
+    .empty { color:var(--muted); padding:12px 0; }
+    @media(max-width:760px){ .half,.third { grid-column:span 12; } main { margin-top:14px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Central de Status</h1>
+    <p>Planeje um ciclo de 20 dias e transforme produtos em publicações prontas para o WhatsApp.</p>
+  </header>
+  <main>
+    <div class="grid">
+      <section class="card half">
+        <h2>1. Configurar ciclo</h2>
+        <label for="cycleName">Nome do ciclo</label>
+        <input id="cycleName" placeholder="Ex.: Ciclo de setembro">
+        <label for="startDate">Data de início</label>
+        <input id="startDate" type="date">
+        <label for="delivery">Informação de entrega local</label>
+        <input id="delivery" placeholder="Ex.: Entrega em Campinas e região">
+        <div class="actions">
+          <button id="saveConfig">Salvar ciclo</button>
+          <button class="secondary" id="exportData">Exportar backup</button>
+          <label for="importData" class="secondary" style="display:inline-block;padding:10px 14px;border-radius:8px;cursor:pointer;color:var(--brand);background:#f2e8ee;">Importar backup</label>
+          <input id="importData" type="file" accept="application/json" hidden>
+        </div>
+        <p id="configStatus" class="status" role="status"></p>
+      </section>
+
+      <section class="card half">
+        <h2>2. Cadastrar produto</h2>
+        <label for="productName">Nome do produto</label>
+        <input id="productName" placeholder="Ex.: Colônia ...">
+        <label for="category">Categoria</label>
+        <select id="category"><option>Perfumaria</option><option>Cuidados</option><option>Maquiagem</option><option>Presentes</option><option>Outro</option></select>
+        <label for="price">Preço e condição</label>
+        <input id="price" placeholder="Ex.: R$ 99,90 ou promoção do ciclo">
+        <label for="audience">Indicação</label>
+        <input id="audience" placeholder="Ex.: quem gosta de fragrâncias doces">
+        <label for="notes">Benefício ou descrição curta</label>
+        <textarea id="notes" placeholder="Ex.: fragrância marcante para usar à noite"></textarea>
+        <label for="photo">Foto (opcional)</label>
+        <input id="photo" type="file" accept="image/*">
+        <div class="actions"><button id="addProduct">Adicionar produto</button></div>
+        <p id="productStatus" class="status" role="status"></p>
+      </section>
+
+      <section class="card">
+        <h2>Catálogo importado</h2>
+        <p class="hint"><b>Importante:</b> não é para abrir o arquivo JSON diretamente. Abra esta Central de Status e use o botão abaixo para selecionar o catálogo convertido.</p>
+        <p class="hint">Para manter a ferramenta gratuita e local, o PDF é convertido para um arquivo pesquisável. O conteúdo fica no seu navegador e não é enviado para nenhum serviço.</p>
+        <label for="catalogImport" class="secondary" style="display:inline-block;padding:10px 14px;border-radius:8px;cursor:pointer;color:var(--brand);background:#f2e8ee;">Importar catálogo convertido</label>
+        <input id="catalogImport" type="file" accept="application/json" hidden>
+        <button class="secondary" id="loadIncludedCatalog">Carregar catálogo incluído</button>
+        <p id="catalogStatus" class="status" role="status"></p>
+        <input id="catalogSearch" placeholder="Pesquisar marca, produto, código ou palavra-chave" hidden>
+        <div id="catalogResults" class="empty">Nenhum catálogo importado.</div>
+      </section>
+
+      <section class="card third">
+        <h2>Produtos do ciclo</h2>
+        <div id="productList" class="empty">Nenhum produto cadastrado ainda.</div>
+      </section>
+      <section class="card" style="grid-column:span 8;">
+        <h2>Calendário de 20 dias</h2>
+        <p class="hint">O botão “Copiar” deixa cada texto pronto para colar no Status. A música continua sendo escolhida no próprio WhatsApp.</p>
+        <div id="calendar" class="empty">Cadastre ao menos um produto para gerar o calendário.</div>
+      </section>
+    </div>
+  </main>
+  <script>
+    const KEY = "central-status-v1";
+    const $ = id => document.getElementById(id);
+    const state = JSON.parse(localStorage.getItem(KEY) || '{"config":{},"products":[],"catalog":null}');
+    const themes = [
+      ["Produto em destaque", "Conheça {name}. {notes}"],
+      ["Benefício", "{name}: uma opção para {audience}."],
+      ["Pergunta", "Você prefere uma fragrância mais doce, fresca ou marcante? Posso te ajudar a escolher."],
+      ["Sugestão de presente", "Ainda procurando um presente? {name} pode ser uma ótima opção. Me chama que te ajudo."],
+      ["Como escolher", "Se você procura algo para {audience}, vale conhecer {name}."],
+      ["Rotina", "Um cuidado especial faz diferença. Conheça {name} e veja se combina com sua rotina."],
+      ["Disponibilidade", "Tenho {name} disponível para entrega local. Consulte condições e disponibilidade."],
+      ["Interação", "Qual desses você escolheria para usar hoje? Responda este Status e eu te indico uma opção."],
+      ["Combinação", "Uma ideia: combine {name} com outros cuidados da mesma linha."],
+      ["Prova social", "Um dos produtos que mais chama atenção no catálogo: {name}."],
+      ["Oferta do ciclo", "Condição do ciclo: {name} por {price}. Enquanto houver disponibilidade."],
+      ["Dúvida comum", "Quer saber como é a fragrância ou textura de {name}? Me chama que explico."],
+      ["Presente rápido", "Presente sem complicação: {name}. Posso separar para você."],
+      ["Autocuidado", "Seu momento de autocuidado pode começar com {name}."],
+      ["Escolha personalizada", "Me diga para quem é o produto e seu orçamento. Posso sugerir {name}."],
+      ["Lembrete", "Você já viu {name}? Esta é uma das opções do ciclo atual."],
+      ["Últimos dias", "O ciclo está chegando ao fim. Se interessou por {name}, fale comigo."],
+      ["Última chamada", "Últimos dias para consultar a condição de {name} neste ciclo."],
+      ["Atendimento local", "Faço atendimento e entrega local. Quer reservar {name}?"],
+      ["Encerramento", "Última oportunidade do ciclo para pedir {name}. Me chame para confirmar."]
+    ];
+    function persist(){ localStorage.setItem(KEY, JSON.stringify(state)); }
+    function esc(s){ return String(s || "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
+    function formatDate(date){ return new Intl.DateTimeFormat("pt-BR").format(date); }
+    function dateForDay(i){ const d = new Date((state.config.startDate || new Date().toISOString().slice(0,10)) + "T12:00:00"); d.setDate(d.getDate()+i); return d; }
+    function render(){
+      $("cycleName").value = state.config.name || "";
+      $("startDate").value = state.config.startDate || new Date().toISOString().slice(0,10);
+      $("delivery").value = state.config.delivery || "";
+      const search = $("catalogSearch");
+      const results = $("catalogResults");
+      search.hidden = !state.catalog;
+      if (state.catalog && !search.value) {
+        results.innerHTML = `<p class="hint"><b>${state.catalog.sourceFile}</b> · ${state.catalog.pageCount} páginas · importado em ${state.catalog.importedAt}</p><p class="hint">Digite uma busca para encontrar páginas relevantes. Revise preço e estoque antes de publicar.</p>`;
+      } else if (state.catalog) {
+        const query = search.value.trim().toLowerCase();
+        const matches = state.catalog.pages.filter(p => !query || p.text.toLowerCase().includes(query)).slice(0, 30);
+        results.innerHTML = matches.length ? matches.map(p => `<article class="product"><strong>Página ${p.page}</strong><small>${esc(p.text.slice(0, 700))}${p.text.length > 700 ? "…" : ""}</small></article>`).join("") : '<div class="empty">Nenhuma página encontrada.</div>';
+      }
+      const list = $("productList");
+      list.innerHTML = state.products.length ? state.products.map((p,i) => `<div class="product"><div class="product-row"><div><strong>${esc(p.name)}</strong><small>${esc(p.category)} · ${esc(p.price || "preço a confirmar")}</small><span class="pill">${esc(p.audience || "público a definir")}</span></div><button class="danger" data-remove="${i}">Remover</button></div></div>`).join("") : '<div class="empty">Nenhum produto cadastrado ainda.</div>';
+      list.querySelectorAll("[data-remove]").forEach(b => b.onclick = () => { state.products.splice(Number(b.dataset.remove),1); persist(); render(); });
+      const cal = $("calendar");
+      if (!state.products.length){ cal.innerHTML = '<div class="empty">Cadastre ao menos um produto para gerar o calendário.</div>'; return; }
+      cal.innerHTML = themes.map((t,i) => {
+        const p = state.products[i % state.products.length];
+        const body = t[1].replaceAll("{name}", p.name).replaceAll("{notes}", p.notes || "uma escolha especial").replaceAll("{audience}", p.audience || "seu estilo").replaceAll("{price}", p.price || "consulte o valor");
+        const text = `${t[0]} — ${p.name}\n${body}${state.config.delivery ? `\n${state.config.delivery}. Me chame para consultar disponibilidade.` : "\nMe chame para consultar disponibilidade."}`;
+        return `<article class="day"><h3>Dia ${i+1} · ${formatDate(dateForDay(i))} · ${esc(t[0])}</h3><p><b>Produto:</b> ${esc(p.name)} · <b>Formato:</b> foto + texto${i % 3 === 2 ? " + enquete/pergunta" : ""}</p><div class="copy">${esc(text)}</div><div class="actions"><button data-copy="${encodeURIComponent(text)}">Copiar texto</button></div></article>`;
+      }).join("");
+      cal.querySelectorAll("[data-copy]").forEach(b => b.onclick = async () => { await navigator.clipboard.writeText(decodeURIComponent(b.dataset.copy)); b.textContent = "Copiado"; setTimeout(() => b.textContent = "Copiar texto", 1400); });
+    }
+    $("saveConfig").onclick = () => { state.config = {name:$("cycleName").value.trim(), startDate:$("startDate").value, delivery:$("delivery").value.trim()}; persist(); render(); $("configStatus").textContent = "Ciclo salvo."; };
+    $("addProduct").onclick = () => {
+      const name = $("productName").value.trim();
+      if (!name){ $("productStatus").textContent = "Informe o nome do produto."; return; }
+      state.products.push({name, category:$("category").value, price:$("price").value.trim(), audience:$("audience").value.trim(), notes:$("notes").value.trim()});
+      persist(); ["productName","price","audience","notes"].forEach(id => $(id).value=""); render(); $("productStatus").textContent = "Produto adicionado.";
+    };
+    $("exportData").onclick = () => { const blob = new Blob([JSON.stringify(state,null,2)], {type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="central-status-backup.json"; a.click(); URL.revokeObjectURL(a.href); };
+    $("importData").onchange = async e => { const file=e.target.files[0]; if(!file) return; try { const imported=JSON.parse(await file.text()); if(!imported || !Array.isArray(imported.products)) throw new Error("Formato inválido"); state.config=imported.config||{}; state.products=imported.products; persist(); render(); $("configStatus").textContent="Backup importado."; } catch { $("configStatus").textContent="Não foi possível importar este arquivo."; } e.target.value=""; };
+    $("catalogImport").onchange = async e => { const file=e.target.files[0]; if(!file) return; try { const imported=JSON.parse(await file.text()); if(imported?.format !== "central-status-catalog-v1" || !Array.isArray(imported.pages)) throw new Error("Formato inválido"); state.catalog=imported; persist(); render(); $("catalogStatus").textContent=`Catálogo importado: ${imported.pageCount} páginas.`; } catch { $("catalogStatus").textContent="Não foi possível importar este catálogo convertido."; } e.target.value=""; };
+    $("loadIncludedCatalog").onclick = async () => { try { const response = await fetch("catalogo_boticario_202614.catalogo.json"); if (!response.ok) throw new Error("Falha ao carregar"); const imported = await response.json(); if (imported?.format !== "central-status-catalog-v1" || !Array.isArray(imported.pages)) throw new Error("Formato inválido"); state.catalog = imported; persist(); render(); $("catalogStatus").textContent = `Catálogo incluído carregado: ${imported.pageCount} páginas.`; } catch { $("catalogStatus").textContent = "Não foi possível carregar o catálogo incluído."; } };
+    $("catalogSearch").oninput = render;
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+    render();
+  </script>
+</body>
+</html>
