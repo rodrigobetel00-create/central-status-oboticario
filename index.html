@@ -144,28 +144,29 @@
         const query = search.value.trim().toLowerCase();
         const matches = state.catalog.pages.filter(p => !query || p.text.toLowerCase().includes(query)).slice(0, 30);
         results.innerHTML = matches.length ? matches.map((p, index) => {
-          const priceMatch = p.text.match(/R\$\s*[\d.,]+/);
+          const details = extractCatalogDetails(p.text, query, p.page);
           const lines = p.text.split(/\n+/).map(line => line.trim()).filter(Boolean);
-          const name = productNameFromPage(lines, query, p.page);
-          return `<article class="product"><strong>Página ${p.page}</strong><small>${esc(p.text.slice(0, 700))}${p.text.length > 700 ? "…" : ""}</small><div class="actions"><button data-add-catalog="${index}">Adicionar ao ciclo</button></div></article>`;
+          return `<article class="product"><strong>${esc(details.name)}</strong><small>Página ${p.page} · ${esc(details.category)} · ${esc(details.code || "código não identificado")} · ${esc(details.price || "preço não identificado")}${details.promoPrice ? ` · promoção: ${esc(details.promoPrice)}` : ""}</small><small>${esc(p.text.slice(0, 500))}${p.text.length > 500 ? "…" : ""}</small><div class="actions"><button data-add-catalog="${index}">Adicionar ao ciclo</button></div></article>`;
         }).join("") : '<div class="empty">Nenhuma página encontrada.</div>';
         results.querySelectorAll("[data-add-catalog]").forEach(button => button.onclick = () => {
           const query = search.value.trim().toLowerCase();
           const matches = state.catalog.pages.filter(p => !query || p.text.toLowerCase().includes(query)).slice(0, 30);
           const page = matches[Number(button.dataset.addCatalog)];
           if (!page) return;
-          const priceMatch = page.text.match(/R\$\s*[\d.,]+/);
-          const lines = page.text.split(/\n+/).map(line => line.trim()).filter(Boolean);
-          const name = productNameFromPage(lines, query, page.page);
+          const details = extractCatalogDetails(page.text, query, page.page);
+          const name = details.name;
           const existing = state.products.some(product => product.catalogPage === page.page && product.name === name);
           if (!existing) {
             state.products.push({
               name: name.slice(0, 100),
-              category: "Catálogo",
-              price: priceMatch ? priceMatch[0] : "",
+              category: details.category,
+              price: details.promoPrice || details.price,
               audience: "",
-              notes: `Encontrado na página ${page.page}. ${page.text.slice(0, 300)}`,
-              catalogPage: page.page
+              notes: `${details.description} Encontrado na página ${page.page}.`,
+              catalogPage: page.page,
+              catalogCode: details.code,
+              regularPrice: details.price,
+              promoPrice: details.promoPrice
             });
             persist();
             render();
@@ -176,7 +177,7 @@
         });
       }
       const list = $("productList");
-      list.innerHTML = state.products.length ? state.products.map((p,i) => `<div class="product"><div class="product-row"><div><strong>${esc(p.name)}</strong><small>${esc(p.category)} · ${esc(p.price || "preço a confirmar")}</small><span class="pill">${esc(p.audience || "público a definir")}</span></div><button class="danger" data-remove="${i}">Remover</button></div></div>`).join("") : '<div class="empty">Nenhum produto cadastrado ainda.</div>';
+      list.innerHTML = state.products.length ? state.products.map((p,i) => `<div class="product"><div class="product-row"><div><strong>${esc(p.name)}</strong><small>${esc(p.category)}${p.catalogCode ? ` · código ${esc(p.catalogCode)}` : ""} · ${esc(p.price || "preço a confirmar")}</small><span class="pill">${esc(p.audience || "público a definir")}</span></div><button class="danger" data-remove="${i}">Remover</button></div></div>`).join("") : '<div class="empty">Nenhum produto cadastrado ainda.</div>';
       list.querySelectorAll("[data-remove]").forEach(b => b.onclick = () => { state.products.splice(Number(b.dataset.remove),1); persist(); render(); });
       const cal = $("calendar");
       if (!state.products.length){ cal.innerHTML = '<div class="empty">Cadastre ao menos um produto para gerar o calendário.</div>'; return; }
@@ -206,6 +207,18 @@
       return lines.find(line => productWords.test(line) && !ignored.test(line) && line.length >= 4)
         || lines.find(line => query && line.toLowerCase().includes(query) && !ignored.test(line))
         || `Produto da página ${pageNumber}`;
+    }
+    function extractCatalogDetails(text, query, pageNumber){
+      const lines = text.split(/\n+/).map(line => line.trim()).filter(Boolean);
+      const prices = [...text.matchAll(/R\$\s*[\d.,]+/g)].map(match => match[0].replace(/\s+/g, " "));
+      const codes = [...text.matchAll(/(?:^|\s)(\d{5})(?=\s|$)/g)].map(match => match[1]);
+      const name = productNameFromPage(lines, query, pageNumber);
+      const category = /perfume|colônia|colonia|body spray|desodorante colônia/i.test(text) ? "Perfumaria"
+        : /creme|hidratante|sabonete|shampoo|condicionador|loção|locao/i.test(text) ? "Cuidados"
+        : /batom|máscara|mascara|base|paleta|delineador/i.test(text) ? "Maquiagem"
+        : /kit|presente/i.test(text) ? "Presentes" : "Catálogo";
+      const description = lines.filter(line => line.length > 25 && !/R\$|\d{5}|PROMOÇÃO|PROMOCAO|ECONOMIZE/i.test(line)).slice(-2).join(" ");
+      return {name, category, code: codes[0] || "", price: prices[0] || "", promoPrice: prices.length > 1 ? prices[1] : "", description: description.slice(0, 280)};
     }
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
     render();
