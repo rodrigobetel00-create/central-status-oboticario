@@ -95,6 +95,14 @@
         <div id="productList" class="empty">Nenhum produto cadastrado ainda.</div>
       </section>
       <section class="card" style="grid-column:span 8;">
+        <h2>Arte para o Status</h2>
+        <p class="hint">Selecione um produto para gerar uma imagem vertical. A arte é criada no seu aparelho e não é enviada para nenhum serviço.</p>
+        <select id="artProduct"><option value="">Selecione um produto</option></select>
+        <div class="actions"><button id="generateArt">Gerar e baixar PNG</button></div>
+        <p id="artStatus" class="status" role="status"></p>
+        <canvas id="artCanvas" width="1080" height="1920" hidden></canvas>
+      </section>
+      <section class="card" style="grid-column:span 8;">
         <h2>Calendário de 20 dias</h2>
         <p class="hint">O botão “Copiar” deixa cada texto pronto para colar no Status. A música continua sendo escolhida no próprio WhatsApp.</p>
         <div id="calendar" class="empty">Cadastre ao menos um produto para gerar o calendário.</div>
@@ -179,6 +187,10 @@
       const list = $("productList");
       list.innerHTML = state.products.length ? state.products.map((p,i) => `<div class="product"><div class="product-row"><div><strong>${esc(p.name)}</strong><small>${esc(p.category)}${p.catalogCode ? ` · código ${esc(p.catalogCode)}` : ""} · ${esc(p.price || "preço a confirmar")}</small><span class="pill">${esc(p.audience || "público a definir")}</span></div><button class="danger" data-remove="${i}">Remover</button></div></div>`).join("") : '<div class="empty">Nenhum produto cadastrado ainda.</div>';
       list.querySelectorAll("[data-remove]").forEach(b => b.onclick = () => { state.products.splice(Number(b.dataset.remove),1); persist(); render(); });
+      const artProduct = $("artProduct");
+      const selected = artProduct.value;
+      artProduct.innerHTML = '<option value="">Selecione um produto</option>' + state.products.map((p,i) => `<option value="${i}">${esc(p.name)}</option>`).join("");
+      if (state.products[selected]) artProduct.value = selected;
       const cal = $("calendar");
       if (!state.products.length){ cal.innerHTML = '<div class="empty">Cadastre ao menos um produto para gerar o calendário.</div>'; return; }
       cal.innerHTML = themes.map((t,i) => {
@@ -201,6 +213,33 @@
     $("catalogImport").onchange = async e => { const file=e.target.files[0]; if(!file) return; try { const imported=JSON.parse(await file.text()); if(imported?.format !== "central-status-catalog-v1" || !Array.isArray(imported.pages)) throw new Error("Formato inválido"); state.catalog=imported; persist(); render(); $("catalogStatus").textContent=`Catálogo importado: ${imported.pageCount} páginas.`; } catch { $("catalogStatus").textContent="Não foi possível importar este catálogo convertido."; } e.target.value=""; };
     $("loadIncludedCatalog").onclick = async () => { try { const response = await fetch("catalogo_boticario_202614.catalogo.json"); if (!response.ok) throw new Error("Falha ao carregar"); const imported = await response.json(); if (imported?.format !== "central-status-catalog-v1" || !Array.isArray(imported.pages)) throw new Error("Formato inválido"); state.catalog = imported; persist(); render(); $("catalogStatus").textContent = `Catálogo incluído carregado: ${imported.pageCount} páginas.`; } catch { $("catalogStatus").textContent = "Não foi possível carregar o catálogo incluído."; } };
     $("catalogSearch").oninput = render;
+    $("generateArt").onclick = () => {
+      const product = state.products[Number($("artProduct").value)];
+      if (!product) { $("artStatus").textContent = "Selecione um produto primeiro."; return; }
+      const canvas = $("artCanvas");
+      const ctx = canvas.getContext("2d");
+      const gradient = ctx.createLinearGradient(0, 0, 1080, 1920);
+      gradient.addColorStop(0, "#6f2d55"); gradient.addColorStop(1, "#d783aa");
+      ctx.fillStyle = gradient; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#fff5f9"; ctx.globalAlpha = .16; ctx.beginPath(); ctx.arc(850, 270, 280, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.fillStyle = "#fff5f9"; ctx.textAlign = "center";
+      ctx.font = "600 42px system-ui"; ctx.fillText("NOVIDADE DO CICLO", 540, 230);
+      const nameLines = wrapCanvasText(ctx, product.name.toUpperCase(), 540, 650, 860, 92);
+      ctx.font = "700 92px system-ui"; nameLines.forEach((line, i) => ctx.fillText(line, 540, 650 + i * 110));
+      ctx.font = "500 38px system-ui"; ctx.fillText(product.category || "Produto", 540, 650 + nameLines.length * 110 + 20);
+      ctx.font = "700 64px system-ui"; ctx.fillText(product.price || "Consulte o valor", 540, 1120);
+      ctx.font = "400 38px system-ui"; const descLines = wrapCanvasText(ctx, product.notes || "Uma escolha especial para você.", 540, 1280, 820, 38); descLines.forEach((line, i) => ctx.fillText(line, 540, 1280 + i * 52));
+      ctx.font = "600 42px system-ui"; ctx.fillText(state.config.delivery || "Entrega local", 540, 1660);
+      ctx.font = "400 34px system-ui"; ctx.fillText("Me chame para consultar disponibilidade", 540, 1740);
+      const link = document.createElement("a"); link.download = `${product.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "produto"}-status.png`; link.href = canvas.toDataURL("image/png"); link.click();
+      $("artStatus").textContent = "Arte gerada e baixada como PNG.";
+    };
+    function wrapCanvasText(ctx, text, centerX, startY, maxWidth, fontSize) {
+      ctx.font = `700 ${fontSize}px system-ui`;
+      const words = String(text).split(/\s+/), lines = []; let line = "";
+      for (const word of words) { const test = line ? `${line} ${word}` : word; if (ctx.measureText(test).width > maxWidth && line) { lines.push(line); line = word; } else line = test; }
+      if (line) lines.push(line); return lines.slice(0, 4);
+    }
     function productNameFromPage(lines, query, pageNumber){
       const productWords = /COLÔNIA|COLONIA|PERFUME|CREME|HIDRATANTE|DESODORANTE|BODY|SABONETE|BATOM|MÁSCARA|MASCARA|SHAMPOO|CONDICIONADOR|KIT|PALETA|LOÇÃO|LOCAO|SPRAY/i;
       const ignored = /^(ISSN|ESTE CAT|BRASIL|CICLO|LANÇAMENTO|LANCAMENTO|PROMOÇÃO|PROMOCAO|R\$|\d+$)/i;
