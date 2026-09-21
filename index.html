@@ -121,6 +121,7 @@
     const KEY = "central-status-v1";
     const $ = id => document.getElementById(id);
     const state = JSON.parse(localStorage.getItem(KEY) || '{"config":{},"products":[],"catalog":null}');
+    let catalogPageImages = null;
     const themes = [
       ["Produto em destaque", "Conheça {name}. {notes}"],
       ["Benefício", "{name}: uma opção para {audience}."],
@@ -182,7 +183,8 @@
               catalogPage: page.page,
               catalogCode: details.code,
               regularPrice: details.price,
-              promoPrice: details.promoPrice
+              promoPrice: details.promoPrice,
+              catalogImage: `catalogo-paginas/pagina-${String(page.page).padStart(3, "0")}.jpg`
             });
             persist();
             render();
@@ -274,6 +276,19 @@
       if (!product) return "";
       return `Produto em destaque — ${product.name}\nConheça ${product.name}. ${product.notes || "uma escolha especial"}${state.config.delivery ? `\n${state.config.delivery}. Me chame para consultar disponibilidade.` : "\nMe chame para consultar disponibilidade."}`;
     }
+    async function productImageSource(product) {
+      if (product.photo) return product.photo;
+      if (product.catalogPage) {
+        if (!catalogPageImages) {
+          const response = await fetch("catalogo-paginas.json");
+          if (!response.ok) throw new Error("Não foi possível carregar as imagens do catálogo.");
+          catalogPageImages = await response.json();
+        }
+        return catalogPageImages[String(product.catalogPage)] || product.catalogImage || "";
+      }
+      if (product.catalogImage) return product.catalogImage;
+      return "";
+    }
     $("generateArt").onclick = async () => {
       const product = state.products[Number($("artProduct").value)];
       if (!product) { $("artStatus").textContent = "Selecione um produto primeiro."; return; }
@@ -285,16 +300,23 @@
       ctx.fillStyle = "#fff5f9"; ctx.globalAlpha = .16; ctx.beginPath(); ctx.arc(850, 270, 280, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
       ctx.fillStyle = "#fff5f9"; ctx.textAlign = "center";
       ctx.font = "600 42px system-ui"; ctx.fillText("NOVIDADE DO CICLO", 540, 230);
-      if (product.photo) {
+      let imageSource = "";
+      try {
+        imageSource = await productImageSource(product);
+      } catch (error) {
+        $("artStatus").textContent = error.message;
+        return;
+      }
+      if (imageSource) {
         try {
-          const image = await loadImage(product.photo);
+          const image = await loadImage(imageSource);
           drawImageContain(ctx, image, 170, 290, 740, 360);
         } catch {
           $("artStatus").textContent = "A foto do produto não pôde ser carregada. Tente escolher a imagem novamente.";
           return;
         }
       }
-      const nameStart = product.photo ? 760 : 650;
+      const nameStart = imageSource ? 760 : 650;
       const nameLines = wrapCanvasText(ctx, product.name.toUpperCase(), 540, nameStart, 860, 92);
       ctx.font = "700 92px system-ui"; nameLines.forEach((line, i) => ctx.fillText(line, 540, nameStart + i * 110));
       ctx.font = "500 38px system-ui"; ctx.fillText(product.category || "Produto", 540, nameStart + nameLines.length * 110 + 20);
