@@ -99,6 +99,9 @@
         <h2>Arte para o Status</h2>
         <p class="hint">Selecione um produto para gerar uma imagem vertical e analisar a prévia antes de publicar. A arte é criada no seu aparelho e não é enviada para nenhum serviço.</p>
         <select id="artProduct"><option value="">Selecione um produto</option></select>
+        <label for="artPhoto">Foto do produto para a arte (opcional)</label>
+        <input id="artPhoto" type="file" accept="image/*">
+        <p class="hint">Para itens do catálogo, escolha aqui uma foto salva no seu aparelho. O catálogo convertido contém texto, não fotos.</p>
         <div class="actions">
           <button id="generateArt">Gerar prévia</button>
           <button class="secondary" id="downloadArt" hidden>Baixar PNG</button>
@@ -208,17 +211,61 @@
       cal.querySelectorAll("[data-whatsapp]").forEach(b => b.onclick = () => openWhatsApp(decodeURIComponent(b.dataset.whatsapp)));
     }
     $("saveConfig").onclick = () => { state.config = {name:$("cycleName").value.trim(), startDate:$("startDate").value, delivery:$("delivery").value.trim()}; persist(); render(); $("configStatus").textContent = "Ciclo salvo."; };
-    $("addProduct").onclick = () => {
+    async function imageFileToDataUrl(file) {
+      const source = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("Não foi possível ler a foto."));
+        reader.readAsDataURL(file);
+      });
+      const image = await new Promise((resolve, reject) => {
+        const item = new Image();
+        item.onload = () => resolve(item);
+        item.onerror = () => reject(new Error("O arquivo escolhido não é uma imagem válida."));
+        item.src = source;
+      });
+      const maxSize = 1000;
+      const scale = Math.min(1, maxSize / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", .86);
+    }
+    $("addProduct").onclick = async () => {
       const name = $("productName").value.trim();
       if (!name){ $("productStatus").textContent = "Informe o nome do produto."; return; }
-      state.products.push({name, category:$("category").value, price:$("price").value.trim(), audience:$("audience").value.trim(), notes:$("notes").value.trim()});
+      try {
+        const photoFile = $("photo").files[0];
+        const photo = photoFile ? await imageFileToDataUrl(photoFile) : "";
+        state.products.push({name, category:$("category").value, price:$("price").value.trim(), audience:$("audience").value.trim(), notes:$("notes").value.trim(), photo});
+      } catch (error) {
+        $("productStatus").textContent = error.message;
+        return;
+      }
       persist(); ["productName","price","audience","notes"].forEach(id => $(id).value=""); render(); $("productStatus").textContent = "Produto adicionado.";
+      $("photo").value = "";
     };
     $("exportData").onclick = () => { const blob = new Blob([JSON.stringify(state,null,2)], {type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="central-status-backup.json"; a.click(); URL.revokeObjectURL(a.href); };
     $("importData").onchange = async e => { const file=e.target.files[0]; if(!file) return; try { const imported=JSON.parse(await file.text()); if(!imported || !Array.isArray(imported.products)) throw new Error("Formato inválido"); state.config=imported.config||{}; state.products=imported.products; persist(); render(); $("configStatus").textContent="Backup importado."; } catch { $("configStatus").textContent="Não foi possível importar este arquivo."; } e.target.value=""; };
     $("catalogImport").onchange = async e => { const file=e.target.files[0]; if(!file) return; try { const imported=JSON.parse(await file.text()); if(imported?.format !== "central-status-catalog-v1" || !Array.isArray(imported.pages)) throw new Error("Formato inválido"); state.catalog=imported; persist(); render(); $("catalogStatus").textContent=`Catálogo importado: ${imported.pageCount} páginas.`; } catch { $("catalogStatus").textContent="Não foi possível importar este catálogo convertido."; } e.target.value=""; };
     $("loadIncludedCatalog").onclick = async () => { try { const response = await fetch("catalogo_boticario_202614.catalogo.json"); if (!response.ok) throw new Error("Falha ao carregar"); const imported = await response.json(); if (imported?.format !== "central-status-catalog-v1" || !Array.isArray(imported.pages)) throw new Error("Formato inválido"); state.catalog = imported; persist(); render(); $("catalogStatus").textContent = `Catálogo incluído carregado: ${imported.pageCount} páginas.`; } catch { $("catalogStatus").textContent = "Não foi possível carregar o catálogo incluído."; } };
     $("catalogSearch").oninput = render;
+    $("artPhoto").onchange = async () => {
+      const index = Number($("artProduct").value);
+      const file = $("artPhoto").files[0];
+      if (!state.products[index] || !file) return;
+      try {
+        state.products[index].photo = await imageFileToDataUrl(file);
+        persist();
+        render();
+        $("artProduct").value = String(index);
+        $("artStatus").textContent = "Foto vinculada ao produto. Gere a prévia para analisar.";
+      } catch (error) {
+        $("artStatus").textContent = error.message;
+      }
+      $("artPhoto").value = "";
+    };
     function openWhatsApp(text) {
       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
     }
@@ -227,7 +274,7 @@
       if (!product) return "";
       return `Produto em destaque — ${product.name}\nConheça ${product.name}. ${product.notes || "uma escolha especial"}${state.config.delivery ? `\n${state.config.delivery}. Me chame para consultar disponibilidade.` : "\nMe chame para consultar disponibilidade."}`;
     }
-    $("generateArt").onclick = () => {
+    $("generateArt").onclick = async () => {
       const product = state.products[Number($("artProduct").value)];
       if (!product) { $("artStatus").textContent = "Selecione um produto primeiro."; return; }
       const canvas = $("artCanvas");
@@ -238,9 +285,19 @@
       ctx.fillStyle = "#fff5f9"; ctx.globalAlpha = .16; ctx.beginPath(); ctx.arc(850, 270, 280, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
       ctx.fillStyle = "#fff5f9"; ctx.textAlign = "center";
       ctx.font = "600 42px system-ui"; ctx.fillText("NOVIDADE DO CICLO", 540, 230);
-      const nameLines = wrapCanvasText(ctx, product.name.toUpperCase(), 540, 650, 860, 92);
-      ctx.font = "700 92px system-ui"; nameLines.forEach((line, i) => ctx.fillText(line, 540, 650 + i * 110));
-      ctx.font = "500 38px system-ui"; ctx.fillText(product.category || "Produto", 540, 650 + nameLines.length * 110 + 20);
+      if (product.photo) {
+        try {
+          const image = await loadImage(product.photo);
+          drawImageContain(ctx, image, 170, 290, 740, 360);
+        } catch {
+          $("artStatus").textContent = "A foto do produto não pôde ser carregada. Tente escolher a imagem novamente.";
+          return;
+        }
+      }
+      const nameStart = product.photo ? 760 : 650;
+      const nameLines = wrapCanvasText(ctx, product.name.toUpperCase(), 540, nameStart, 860, 92);
+      ctx.font = "700 92px system-ui"; nameLines.forEach((line, i) => ctx.fillText(line, 540, nameStart + i * 110));
+      ctx.font = "500 38px system-ui"; ctx.fillText(product.category || "Produto", 540, nameStart + nameLines.length * 110 + 20);
       ctx.font = "700 64px system-ui"; ctx.fillText(product.price || "Consulte o valor", 540, 1120);
       ctx.font = "400 38px system-ui"; const descLines = wrapCanvasText(ctx, product.notes || "Uma escolha especial para você.", 540, 1280, 820, 38); descLines.forEach((line, i) => ctx.fillText(line, 540, 1280 + i * 52));
       ctx.font = "600 42px system-ui"; ctx.fillText(state.config.delivery || "Entrega local", 540, 1660);
@@ -264,6 +321,27 @@
       if (!text) { $("artStatus").textContent = "Selecione um produto primeiro."; return; }
       openWhatsApp(text);
     };
+    function loadImage(source) {
+      return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error("Imagem inválida."));
+        image.src = source;
+      });
+    }
+    function drawImageContain(ctx, image, x, y, width, height) {
+      const scale = Math.min(width / image.naturalWidth, height / image.naturalHeight);
+      const drawWidth = image.naturalWidth * scale;
+      const drawHeight = image.naturalHeight * scale;
+      ctx.save();
+      ctx.fillStyle = "#fff5f9";
+      ctx.fillRect(x, y, width, height);
+      ctx.beginPath();
+      ctx.rect(x, y, width, height);
+      ctx.clip();
+      ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
+      ctx.restore();
+    }
     function wrapCanvasText(ctx, text, centerX, startY, maxWidth, fontSize) {
       ctx.font = `700 ${fontSize}px system-ui`;
       const words = String(text).split(/\s+/), lines = []; let line = "";
