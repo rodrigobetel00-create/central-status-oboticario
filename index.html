@@ -143,7 +143,37 @@
       } else if (state.catalog) {
         const query = search.value.trim().toLowerCase();
         const matches = state.catalog.pages.filter(p => !query || p.text.toLowerCase().includes(query)).slice(0, 30);
-        results.innerHTML = matches.length ? matches.map(p => `<article class="product"><strong>Página ${p.page}</strong><small>${esc(p.text.slice(0, 700))}${p.text.length > 700 ? "…" : ""}</small></article>`).join("") : '<div class="empty">Nenhuma página encontrada.</div>';
+        results.innerHTML = matches.length ? matches.map((p, index) => {
+          const priceMatch = p.text.match(/R\$\s*[\d.,]+/);
+          const lines = p.text.split(/\n+/).map(line => line.trim()).filter(Boolean);
+          const name = productNameFromPage(lines, query, p.page);
+          return `<article class="product"><strong>Página ${p.page}</strong><small>${esc(p.text.slice(0, 700))}${p.text.length > 700 ? "…" : ""}</small><div class="actions"><button data-add-catalog="${index}">Adicionar ao ciclo</button></div></article>`;
+        }).join("") : '<div class="empty">Nenhuma página encontrada.</div>';
+        results.querySelectorAll("[data-add-catalog]").forEach(button => button.onclick = () => {
+          const query = search.value.trim().toLowerCase();
+          const matches = state.catalog.pages.filter(p => !query || p.text.toLowerCase().includes(query)).slice(0, 30);
+          const page = matches[Number(button.dataset.addCatalog)];
+          if (!page) return;
+          const priceMatch = page.text.match(/R\$\s*[\d.,]+/);
+          const lines = page.text.split(/\n+/).map(line => line.trim()).filter(Boolean);
+          const name = productNameFromPage(lines, query, page.page);
+          const existing = state.products.some(product => product.catalogPage === page.page && product.name === name);
+          if (!existing) {
+            state.products.push({
+              name: name.slice(0, 100),
+              category: "Catálogo",
+              price: priceMatch ? priceMatch[0] : "",
+              audience: "",
+              notes: `Encontrado na página ${page.page}. ${page.text.slice(0, 300)}`,
+              catalogPage: page.page
+            });
+            persist();
+            render();
+            $("catalogStatus").textContent = `${name.slice(0, 70)} foi adicionado ao ciclo.`;
+          } else {
+            $("catalogStatus").textContent = "Esse item já está no ciclo.";
+          }
+        });
       }
       const list = $("productList");
       list.innerHTML = state.products.length ? state.products.map((p,i) => `<div class="product"><div class="product-row"><div><strong>${esc(p.name)}</strong><small>${esc(p.category)} · ${esc(p.price || "preço a confirmar")}</small><span class="pill">${esc(p.audience || "público a definir")}</span></div><button class="danger" data-remove="${i}">Remover</button></div></div>`).join("") : '<div class="empty">Nenhum produto cadastrado ainda.</div>';
@@ -170,6 +200,13 @@
     $("catalogImport").onchange = async e => { const file=e.target.files[0]; if(!file) return; try { const imported=JSON.parse(await file.text()); if(imported?.format !== "central-status-catalog-v1" || !Array.isArray(imported.pages)) throw new Error("Formato inválido"); state.catalog=imported; persist(); render(); $("catalogStatus").textContent=`Catálogo importado: ${imported.pageCount} páginas.`; } catch { $("catalogStatus").textContent="Não foi possível importar este catálogo convertido."; } e.target.value=""; };
     $("loadIncludedCatalog").onclick = async () => { try { const response = await fetch("catalogo_boticario_202614.catalogo.json"); if (!response.ok) throw new Error("Falha ao carregar"); const imported = await response.json(); if (imported?.format !== "central-status-catalog-v1" || !Array.isArray(imported.pages)) throw new Error("Formato inválido"); state.catalog = imported; persist(); render(); $("catalogStatus").textContent = `Catálogo incluído carregado: ${imported.pageCount} páginas.`; } catch { $("catalogStatus").textContent = "Não foi possível carregar o catálogo incluído."; } };
     $("catalogSearch").oninput = render;
+    function productNameFromPage(lines, query, pageNumber){
+      const productWords = /COLÔNIA|COLONIA|PERFUME|CREME|HIDRATANTE|DESODORANTE|BODY|SABONETE|BATOM|MÁSCARA|MASCARA|SHAMPOO|CONDICIONADOR|KIT|PALETA|LOÇÃO|LOCAO|SPRAY/i;
+      const ignored = /^(ISSN|ESTE CAT|BRASIL|CICLO|LANÇAMENTO|LANCAMENTO|PROMOÇÃO|PROMOCAO|R\$|\d+$)/i;
+      return lines.find(line => productWords.test(line) && !ignored.test(line) && line.length >= 4)
+        || lines.find(line => query && line.toLowerCase().includes(query) && !ignored.test(line))
+        || `Produto da página ${pageNumber}`;
+    }
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
     render();
   </script>
