@@ -32,6 +32,7 @@
     .pill { display:inline-block; padding:3px 8px; border-radius:999px; background:#f5e5ee; color:var(--brand); font-size:12px; }
     .day { border-left:4px solid #c7769d; padding:12px 14px; margin:10px 0; background:#fff; border-radius:0 10px 10px 0; }
     .day h3 { margin:0 0 4px; } .day p { margin:5px 0; } .copy { white-space:pre-wrap; background:var(--soft); padding:10px; border-radius:7px; }
+    #artCanvas { display:block; width:min(100%, 360px); height:auto; margin:16px auto 0; border:1px solid var(--line); border-radius:12px; box-shadow:0 5px 18px #4a1d3114; }
     .empty { color:var(--muted); padding:12px 0; }
     @media(max-width:760px){ .half,.third { grid-column:span 12; } main { margin-top:14px; } }
   </style>
@@ -96,15 +97,19 @@
       </section>
       <section class="card" style="grid-column:span 8;">
         <h2>Arte para o Status</h2>
-        <p class="hint">Selecione um produto para gerar uma imagem vertical. A arte é criada no seu aparelho e não é enviada para nenhum serviço.</p>
+        <p class="hint">Selecione um produto para gerar uma imagem vertical e analisar a prévia antes de publicar. A arte é criada no seu aparelho e não é enviada para nenhum serviço.</p>
         <select id="artProduct"><option value="">Selecione um produto</option></select>
-        <div class="actions"><button id="generateArt">Gerar e baixar PNG</button></div>
+        <div class="actions">
+          <button id="generateArt">Gerar prévia</button>
+          <button class="secondary" id="downloadArt" hidden>Baixar PNG</button>
+          <button class="secondary" id="artWhatsapp" hidden>Abrir no WhatsApp</button>
+        </div>
         <p id="artStatus" class="status" role="status"></p>
         <canvas id="artCanvas" width="1080" height="1920" hidden></canvas>
       </section>
       <section class="card" style="grid-column:span 8;">
         <h2>Calendário de 20 dias</h2>
-        <p class="hint">O botão “Copiar” deixa cada texto pronto para colar no Status. A música continua sendo escolhida no próprio WhatsApp.</p>
+        <p class="hint">Use “Copiar texto” ou “Abrir no WhatsApp” para enviar a publicação. A música continua sendo escolhida no próprio WhatsApp.</p>
         <div id="calendar" class="empty">Cadastre ao menos um produto para gerar o calendário.</div>
       </section>
     </div>
@@ -197,9 +202,10 @@
         const p = state.products[i % state.products.length];
         const body = t[1].replaceAll("{name}", p.name).replaceAll("{notes}", p.notes || "uma escolha especial").replaceAll("{audience}", p.audience || "seu estilo").replaceAll("{price}", p.price || "consulte o valor");
         const text = `${t[0]} — ${p.name}\n${body}${state.config.delivery ? `\n${state.config.delivery}. Me chame para consultar disponibilidade.` : "\nMe chame para consultar disponibilidade."}`;
-        return `<article class="day"><h3>Dia ${i+1} · ${formatDate(dateForDay(i))} · ${esc(t[0])}</h3><p><b>Produto:</b> ${esc(p.name)} · <b>Formato:</b> foto + texto${i % 3 === 2 ? " + enquete/pergunta" : ""}</p><div class="copy">${esc(text)}</div><div class="actions"><button data-copy="${encodeURIComponent(text)}">Copiar texto</button></div></article>`;
+        return `<article class="day"><h3>Dia ${i+1} · ${formatDate(dateForDay(i))} · ${esc(t[0])}</h3><p><b>Produto:</b> ${esc(p.name)} · <b>Formato:</b> foto + texto${i % 3 === 2 ? " + enquete/pergunta" : ""}</p><div class="copy">${esc(text)}</div><div class="actions"><button data-copy="${encodeURIComponent(text)}">Copiar texto</button><button class="secondary" data-whatsapp="${encodeURIComponent(text)}">Abrir no WhatsApp</button></div></article>`;
       }).join("");
       cal.querySelectorAll("[data-copy]").forEach(b => b.onclick = async () => { await navigator.clipboard.writeText(decodeURIComponent(b.dataset.copy)); b.textContent = "Copiado"; setTimeout(() => b.textContent = "Copiar texto", 1400); });
+      cal.querySelectorAll("[data-whatsapp]").forEach(b => b.onclick = () => openWhatsApp(decodeURIComponent(b.dataset.whatsapp)));
     }
     $("saveConfig").onclick = () => { state.config = {name:$("cycleName").value.trim(), startDate:$("startDate").value, delivery:$("delivery").value.trim()}; persist(); render(); $("configStatus").textContent = "Ciclo salvo."; };
     $("addProduct").onclick = () => {
@@ -213,6 +219,14 @@
     $("catalogImport").onchange = async e => { const file=e.target.files[0]; if(!file) return; try { const imported=JSON.parse(await file.text()); if(imported?.format !== "central-status-catalog-v1" || !Array.isArray(imported.pages)) throw new Error("Formato inválido"); state.catalog=imported; persist(); render(); $("catalogStatus").textContent=`Catálogo importado: ${imported.pageCount} páginas.`; } catch { $("catalogStatus").textContent="Não foi possível importar este catálogo convertido."; } e.target.value=""; };
     $("loadIncludedCatalog").onclick = async () => { try { const response = await fetch("catalogo_boticario_202614.catalogo.json"); if (!response.ok) throw new Error("Falha ao carregar"); const imported = await response.json(); if (imported?.format !== "central-status-catalog-v1" || !Array.isArray(imported.pages)) throw new Error("Formato inválido"); state.catalog = imported; persist(); render(); $("catalogStatus").textContent = `Catálogo incluído carregado: ${imported.pageCount} páginas.`; } catch { $("catalogStatus").textContent = "Não foi possível carregar o catálogo incluído."; } };
     $("catalogSearch").oninput = render;
+    function openWhatsApp(text) {
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+    }
+    function selectedProductMessage() {
+      const product = state.products[Number($("artProduct").value)];
+      if (!product) return "";
+      return `Produto em destaque — ${product.name}\nConheça ${product.name}. ${product.notes || "uma escolha especial"}${state.config.delivery ? `\n${state.config.delivery}. Me chame para consultar disponibilidade.` : "\nMe chame para consultar disponibilidade."}`;
+    }
     $("generateArt").onclick = () => {
       const product = state.products[Number($("artProduct").value)];
       if (!product) { $("artStatus").textContent = "Selecione um produto primeiro."; return; }
@@ -231,8 +245,24 @@
       ctx.font = "400 38px system-ui"; const descLines = wrapCanvasText(ctx, product.notes || "Uma escolha especial para você.", 540, 1280, 820, 38); descLines.forEach((line, i) => ctx.fillText(line, 540, 1280 + i * 52));
       ctx.font = "600 42px system-ui"; ctx.fillText(state.config.delivery || "Entrega local", 540, 1660);
       ctx.font = "400 34px system-ui"; ctx.fillText("Me chame para consultar disponibilidade", 540, 1740);
-      const link = document.createElement("a"); link.download = `${product.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "produto"}-status.png`; link.href = canvas.toDataURL("image/png"); link.click();
-      $("artStatus").textContent = "Arte gerada e baixada como PNG.";
+      canvas.hidden = false;
+      $("downloadArt").hidden = false;
+      $("artWhatsapp").hidden = false;
+      $("artStatus").textContent = "Prévia gerada. Analise a arte abaixo antes de baixar ou abrir o WhatsApp.";
+    };
+    $("downloadArt").onclick = () => {
+      const product = state.products[Number($("artProduct").value)];
+      if (!product) return;
+      const link = document.createElement("a");
+      link.download = `${product.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "produto"}-status.png`;
+      link.href = $("artCanvas").toDataURL("image/png");
+      link.click();
+      $("artStatus").textContent = "PNG baixado.";
+    };
+    $("artWhatsapp").onclick = () => {
+      const text = selectedProductMessage();
+      if (!text) { $("artStatus").textContent = "Selecione um produto primeiro."; return; }
+      openWhatsApp(text);
     };
     function wrapCanvasText(ctx, text, centerX, startY, maxWidth, fontSize) {
       ctx.font = `700 ${fontSize}px system-ui`;
@@ -241,11 +271,41 @@
       if (line) lines.push(line); return lines.slice(0, 4);
     }
     function productNameFromPage(lines, query, pageNumber){
-      const productWords = /COLÔNIA|COLONIA|PERFUME|CREME|HIDRATANTE|DESODORANTE|BODY|SABONETE|BATOM|MÁSCARA|MASCARA|SHAMPOO|CONDICIONADOR|KIT|PALETA|LOÇÃO|LOCAO|SPRAY/i;
-      const ignored = /^(ISSN|ESTE CAT|BRASIL|CICLO|LANÇAMENTO|LANCAMENTO|PROMOÇÃO|PROMOCAO|R\$|\d+$)/i;
-      return lines.find(line => productWords.test(line) && !ignored.test(line) && line.length >= 4)
-        || lines.find(line => query && line.toLowerCase().includes(query) && !ignored.test(line))
-        || `Produto da página ${pageNumber}`;
+      const productWords = /COLÔNIA|COLONIA|PERFUME|CREME|HIDRATANTE|DESODORANTE|BODY|SABONETE|BATOM|MÁSCARA|MASCARA|SHAMPOO|CONDICIONADOR|KIT|PALETA|LOÇÃO|LOCAO|SPRAY|FLORATTA|BLUE|RED|ROSE|GOLD|MY BLUE|PASSION|NEXT|SOPHIE|EGEO|RODEIO|GARDÊNIA|GARDENIA/i;
+      const noise = /^(ISSN|ESTE CAT|BRASIL|CICLO|LANÇAMENTO|LANCAMENTO|PROMOÇÃO|PROMOCAO|PÁGINA|PAGINA|ATÉ|ATE|R\$|ECONOMIZE|DESCONTO|FRAGRÂNCIA|FRAGRANCIA|INTENSIDADE|CONFIRA|VALOR UNITÁRIO|VALOR UNITARIO|EDIÇÃO LIMITADA|EDICAO LIMITADA|A ARTE DA|•|\d+$)$/i;
+
+      const blocks = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line || !/^\d{5}$/.test(line)) continue;
+        const block = [];
+        for (let j = i + 1; j < lines.length; j++) {
+          const next = lines[j].trim();
+          if (!next) continue;
+          if (/^\d{5}$/.test(next) && j > i + 1) break;
+          if (/R\$|ECONOMIZE|VALOR UNITÁRIO|VALOR UNITARIO|PROMOÇÃO|PROMOCAO|1 item|2 itens|3 ou \+|©|PRESENTEÁVEL|PRESENTEAVEL|ATÉ|ATE/i.test(next)) break;
+          if (noise.test(next.replace(/^[•\-\s]+/, ""))) continue;
+          block.push(next.replace(/[.,;]+$/g, ""));
+          if (j + 1 < lines.length && /R\$|ECONOMIZE|VALOR UNITÁRIO|VALOR UNITARIO|PROMOÇÃO|PROMOCAO/.test(lines[j + 1].trim())) break;
+        }
+        const joined = block.join(" ").replace(/\s+/g, " ").replace(/\s*,\s*/g, " ").trim();
+        if (joined && productWords.test(joined) && !noise.test(joined)) blocks.push(joined);
+      }
+
+      const fallback = lines
+        .map(line => line.trim().replace(/^\d{5}\s*/, "").replace(/[.,;]+$/g, "").trim())
+        .filter(line => line && line.length >= 6 && productWords.test(line) && !noise.test(line));
+
+      const candidates = [...blocks, ...fallback];
+      if (!candidates.length) return `Produto da página ${pageNumber}`;
+
+      if (query) {
+        const q = query.toLowerCase();
+        const qMatch = candidates.find(line => line.toLowerCase().includes(q) || line.toLowerCase().replace(/\s+/g, "").includes(q.replace(/\s+/g, "")));
+        if (qMatch) return qMatch;
+      }
+
+      return candidates[0];
     }
     function extractCatalogDetails(text, query, pageNumber){
       const lines = text.split(/\n+/).map(line => line.trim()).filter(Boolean);
